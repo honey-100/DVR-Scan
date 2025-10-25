@@ -24,26 +24,42 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Install Python dependencies
+    - name: Install Python dependencies (headless)
       run: |
         python -m pip install --upgrade pip wheel setuptools
-        # Install the package and its dependencies
+        # Install headless requirements for CI (avoids GUI OpenCV deps)
+        pip install -r requirements_headless.txt
+        # Install PyInstaller and ensure package is installable
+        pip install pyinstaller
         pip install -e .
-        # Install additional build requirements
-        pip install pyinstaller opencv-python numpy
+        pip list
       shell: pwsh
     
-    - name: Build one-file executable
+    - name: Build one-file executable (capture logs)
       run: |
         # Show workspace contents for debugging
         Get-ChildItem -Recurse dvr_scan | Select-Object FullName
-        # Build with both license files included
+        # Build with both license files included; capture stdout/stderr to file
+        $log = "$PWD\pyinstaller-build.log"
+        Write-Output "Logging PyInstaller output to: $log"
         pyinstaller --onefile --name DVR-Scan --console `
           --add-data "$pwd/dvr_scan/LICENSE;dvr_scan" `
           --add-data "$pwd/dvr_scan/LICENSE-THIRDPARTY;dvr_scan" `
           --add-data "$pwd/dvr_scan;dvr_scan" `
-          dvr_scan/__main__.py
+          "$pwd/dvr_scan/__main__.py" *>&1 | Tee-Object -FilePath $log
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "PyInstaller failed; see $log"
+          exit $LASTEXITCODE
+        }
       shell: pwsh
+
+    - name: Upload PyInstaller log
+      uses: actions/upload-artifact@v4
+      with:
+        name: pyinstaller-log
+        path: pyinstaller-build.log
+        if-no-files-found: warn
+        retention-days: 7
 
     - name: Install NSIS
       run: |
