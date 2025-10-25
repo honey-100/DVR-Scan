@@ -57,16 +57,31 @@ jobs:
 
     - name: Build one-file executable (capture logs)
       run: |
-        # Debug workspace
+        # Debug workspace and locate the package script (works if repo root is nested)
         Write-Output "Workspace root: $PWD"
         Get-ChildItem -Recurse -Force -Depth 2 | Select-Object FullName | ForEach-Object { Write-Output $_.FullName }
-        $log = "$PWD\pyinstaller-build.log"
+        $log = Join-Path $PWD 'pyinstaller-build.log'
+        New-Item -Path $log -ItemType File -Force | Out-Null
         Write-Output "Logging PyInstaller output to: $log"
-        pyinstaller --onefile --name DVR-Scan --console `
-          --add-data "$pwd/dvr_scan/LICENSE;dvr_scan" `
-          --add-data "$pwd/dvr_scan/LICENSE-THIRDPARTY;dvr_scan" `
-          --add-data "$pwd/dvr_scan;dvr_scan" `
-          "$pwd/dvr_scan/__main__.py" *>&1 | Tee-Object -FilePath $log
+
+        # Find dvr_scan/__main__.py anywhere under the workspace
+        $script = Get-ChildItem -Path $PWD -Recurse -File -Filter '__main__.py' -ErrorAction SilentlyContinue |
+          Where-Object { $_.FullName -match '\\dvr_scan\\__main__\.py$' } | Select-Object -First 1
+        if (-not $script) {
+          Write-Output "ERROR: could not find dvr_scan/__main__.py under workspace"
+          Get-ChildItem -Path $PWD -Recurse -Force -ErrorAction SilentlyContinue | Select-Object FullName | ForEach-Object { Write-Output $_.FullName }
+          exit 2
+        }
+        $pkgDir = Split-Path $script.FullName -Parent
+        Write-Output "Found script: $($script.FullName)"
+        Write-Output "Package dir: $pkgDir"
+
+        # Build with PyInstaller (use explicit Windows-style add-data semantics)
+        & pyinstaller --onefile --name DVR-Scan --console `
+          --add-data "${pkgDir}\\LICENSE;dvr_scan" `
+          --add-data "${pkgDir}\\LICENSE-THIRDPARTY;dvr_scan" `
+          --add-data "${pkgDir};dvr_scan" `
+          "$($script.FullName)" *>&1 | Tee-Object -FilePath $log
         $ec = $LASTEXITCODE
         Write-Output "PyInstaller exit code: $ec"
         if ($ec -ne 0) { exit $ec }
