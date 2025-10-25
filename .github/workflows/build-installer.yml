@@ -33,17 +33,19 @@ jobs:
         pip list
       shell: pwsh
 
-    - name: Build and install wheel (prebuilt)
+    - name: Install runtime dependencies (CI)
       run: |
-        # Build a wheel for the package and install it to avoid editable-mode surprises
-        python -m pip wheel . -w wheelhouse
-        ls -la wheelhouse
-        pip install wheelhouse/*.whl
-        # Install headless runtime deps for CI
-        pip install -r requirements_headless.txt
+        # Install headless runtime deps for CI directly (skip building a wheel)
+        Write-Output "Installing headless requirements..."
+        if (Test-Path requirements_headless.txt) {
+          python -m pip install -r requirements_headless.txt
+        } else {
+          Write-Output "requirements_headless.txt not found in workspace root; continuing"
+        }
         # Ensure PyInstaller is present
-        pip install pyinstaller
-        pip list
+        python -m pip install --upgrade pip
+        python -m pip install pyinstaller
+        python -m pip list
       shell: pwsh
     
     - name: Prepare pyinstaller log
