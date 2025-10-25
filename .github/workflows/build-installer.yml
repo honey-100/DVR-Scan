@@ -1,0 +1,53 @@
+name: Build NSIS Installer
+
+on:
+  workflow_dispatch:  # Allow manual trigger
+  push:
+    paths:
+      - 'installer/**'
+      - 'dvr_scan/**'
+      - 'DVR-Scan.spec'
+      - '.github/workflows/build-installer.yml'
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+        cache: 'pip'
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt pyinstaller
+      shell: pwsh
+    
+    - name: Build one-file executable
+      run: |
+        # Build with both license files included
+        pyinstaller --onefile --name DVR-Scan --console --add-data "dvr_scan/LICENSE;dvr_scan" --add-data "dvr_scan/LICENSE-THIRDPARTY;dvr_scan" dvr_scan/__main__.py
+      shell: pwsh
+
+    - name: Install NSIS
+      run: |
+        choco install nsis -y
+      shell: pwsh
+
+    - name: Build NSIS installer
+      run: |
+        cd installer
+        makensis DVR-Scan-installer.nsi
+      shell: pwsh
+
+    - name: Upload installer artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: DVR-Scan-installer
+        path: installer/DVR-Scan-setup-unsigned.exe
+        if-no-files-found: error
