@@ -35,8 +35,14 @@ jobs:
     
     - name: Build one-file executable
       run: |
+        # Show workspace contents for debugging
+        Get-ChildItem -Recurse dvr_scan | Select-Object FullName
         # Build with both license files included
-        pyinstaller --onefile --name DVR-Scan --console --add-data "dvr_scan/LICENSE;dvr_scan" --add-data "dvr_scan/LICENSE-THIRDPARTY;dvr_scan" dvr_scan/__main__.py
+        pyinstaller --onefile --name DVR-Scan --console `
+          --add-data "$pwd/dvr_scan/LICENSE;dvr_scan" `
+          --add-data "$pwd/dvr_scan/LICENSE-THIRDPARTY;dvr_scan" `
+          --add-data "$pwd/dvr_scan;dvr_scan" `
+          dvr_scan/__main__.py
       shell: pwsh
 
     - name: Install NSIS
