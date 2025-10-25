@@ -24,22 +24,40 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Install Python dependencies (headless)
+    - name: Debug Python environment
       run: |
+        python -V
+        python -c "import sys; print(sys.executable)"
+        python -m pip --version
         python -m pip install --upgrade pip wheel setuptools
-        # Install headless requirements for CI (avoids GUI OpenCV deps)
+        pip list
+      shell: pwsh
+
+    - name: Build and install wheel (prebuilt)
+      run: |
+        # Build a wheel for the package and install it to avoid editable-mode surprises
+        python -m pip wheel . -w wheelhouse
+        ls -la wheelhouse
+        pip install wheelhouse/*.whl
+        # Install headless runtime deps for CI
         pip install -r requirements_headless.txt
-        # Install PyInstaller and ensure package is installable
+        # Ensure PyInstaller is present
         pip install pyinstaller
-        pip install -e .
         pip list
       shell: pwsh
     
+    - name: Prepare pyinstaller log
+      run: |
+        $log = "$PWD\pyinstaller-build.log"
+        New-Item -Path $log -ItemType File -Force | Out-Null
+        Write-Output "Prepared log file at: $log"
+      shell: pwsh
+
     - name: Build one-file executable (capture logs)
       run: |
-        # Show workspace contents for debugging
-        Get-ChildItem -Recurse dvr_scan | Select-Object FullName
-        # Build with both license files included; capture stdout/stderr to file
+        # Debug workspace
+        Write-Output "Workspace root: $PWD"
+        Get-ChildItem -Recurse -Force -Depth 2 | Select-Object FullName | ForEach-Object { Write-Output $_.FullName }
         $log = "$PWD\pyinstaller-build.log"
         Write-Output "Logging PyInstaller output to: $log"
         pyinstaller --onefile --name DVR-Scan --console `
@@ -47,17 +65,26 @@ jobs:
           --add-data "$pwd/dvr_scan/LICENSE-THIRDPARTY;dvr_scan" `
           --add-data "$pwd/dvr_scan;dvr_scan" `
           "$pwd/dvr_scan/__main__.py" *>&1 | Tee-Object -FilePath $log
-        if ($LASTEXITCODE -ne 0) {
-          Write-Error "PyInstaller failed; see $log"
-          exit $LASTEXITCODE
-        }
+        $ec = $LASTEXITCODE
+        Write-Output "PyInstaller exit code: $ec"
+        if ($ec -ne 0) { exit $ec }
       shell: pwsh
 
-    - name: Upload PyInstaller log
+    - name: Upload PyInstaller log (always)
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: pyinstaller-log
         path: pyinstaller-build.log
+        if-no-files-found: warn
+        retention-days: 7
+
+    - name: Upload dist folder (always)
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: dist-folder
+        path: dist
         if-no-files-found: warn
         retention-days: 7
 
